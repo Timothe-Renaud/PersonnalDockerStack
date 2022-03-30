@@ -1,0 +1,102 @@
+# ownCloud with MariaDB/MySQL
+#
+# Access via "http://localhost:8080" (or "http://$(docker-machine ip):8080" if using docker-machine)
+#
+# During initial ownCloud setup, select "Storage & database" --> "Configure the database" --> "MySQL/MariaDB"
+# Database user: root
+# Database password: ex@mple
+# Database name: pick any name
+# Database host: replace "localhost" with "mariadb"
+
+version: "3.3"
+
+services:
+
+  traefik:
+    image: "traefik:v2.4"
+    container_name: "traefik"
+    command:
+      #- "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+#--------------------------------------------------------
+#               Parie markdowneditor
+#--------------------------------------------------------
+  markdown:
+    image: v4tech/markdown-editor
+    restart: always
+    ports: 
+      - "1018:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`md.localhost`)"
+      - "traefik.http.routers.whoami.entrypoints=web"
+#--------------------------------------------------------
+#               Parie OWNCLOUD
+#--------------------------------------------------------
+  owncloud:
+    image: owncloud:latest
+    restart: always
+    ports:
+      - "8091:80"
+    depends_on:
+      - phpmyadmin
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`cloud.localhost`)"
+      - "traefik.http.routers.whoami.entrypoints=web"
+
+#--------------------------------------------------------
+#               Parie WIKI
+#--------------------------------------------------------
+  mediawiki:
+    image: mediawiki
+    restart: always
+    ports:
+      - "8090:80"
+    links:
+      - mariadb
+    volumes:
+      - /var/www/html/images
+      #- ./LocalSettings/LocalSettings.php:/var/www/html/LocalSettings.php
+    depends_on: 
+      - phpmyadmin
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`wiki.localhost`)"
+      - "traefik.http.routers.whoami.entrypoints=web"
+
+#--------------------------------------------------------
+#               Parie admin-DB-WEB
+#--------------------------------------------------------
+  phpmyadmin:
+    image: phpmyadmin
+    restart: always
+    ports:
+      - "8081:80"
+    environment:
+      - PMA_ARBITRARY=1
+    depends_on: 
+      - mariadb
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`php.localhost`)"
+      - "traefik.http.routers.whoami.entrypoints=web"
+
+#--------------------------------------------------------
+#               Parie DB
+#--------------------------------------------------------
+  mariadb:
+    image: mariadb:10.5
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ex@mple
